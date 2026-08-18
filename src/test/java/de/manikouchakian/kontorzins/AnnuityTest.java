@@ -54,4 +54,21 @@ class AnnuityTest {
         assertThrows(IllegalArgumentException.class,
                 () -> Annuity.monthlyPayment(new BigDecimal("100000"), new BigDecimal("-0.01"), 120));
     }
+
+    @Test
+    @DisplayName("matches a known value: 100000 EUR at 3.5 % over 240 months")
+    void matchesKnownValueForTwentyYearLoan() {
+        // 100000 EUR, 3.5 % nominal, 20 years -> 579.96 EUR per month.
+        // Without a test like this one, the three tests above would still pass
+        // if the formula were wrong, as long as it stayed monotonic.
+        assertEquals(new BigDecimal("579.96"),
+                Annuity.monthlyPayment(new BigDecimal("100000"), new BigDecimal("0.035"), 240));
+    }
+
+    @Test
+    @DisplayName("matches a known value: 10000 EUR at 5 % over 12 months")
+    void matchesKnownValueForOneYearLoan() {
+        assertEquals(new BigDecimal("856.07"),
+                Annuity.monthlyPayment(new BigDecimal("10000"), new BigDecimal("0.05"), 12));
+    }
 }
