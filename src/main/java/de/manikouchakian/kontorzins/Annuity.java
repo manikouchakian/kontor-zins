@@ -1,5 +1,7 @@
 package de.manikouchakian.kontorzins;
 
+import de.manikouchakian.kontorzins.model.LoanTerms;
+
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
@@ -24,9 +26,9 @@ public final class Annuity {
      *
      * <pre>A = K * (i * (1+i)^n) / ((1+i)^n - 1)</pre>
      *
-     * @param principal  Darlehensbetrag K, muss größer als 0 sein
+     * @param principal Darlehensbetrag K, muss größer als 0 sein
      * @param annualRate nominaler Jahreszins als Dezimalzahl, z. B. 0.04 für 4 %
-     * @param months     Laufzeit n in Monaten, muss größer als 0 sein
+     * @param months Laufzeit n in Monaten, muss größer als 0 sein
      * @return monatliche Rate, gerundet auf zwei Nachkommastellen
      */
     public static BigDecimal monthlyPayment(BigDecimal principal, BigDecimal annualRate, int months) {
@@ -55,5 +57,21 @@ public final class Annuity {
         BigDecimal denominator = growth.subtract(BigDecimal.ONE);
 
         return numerator.divide(denominator, 2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Dieselbe Rechnung, aber mit den Eckdaten als einem Objekt.
+     *
+     * <p>Die alte Signatur bleibt bestehen, diese hier ruft sie auf. Die Formel steht
+     * damit weiterhin an genau einer Stelle im Projekt.
+     *
+     * @param terms Eckdaten des Darlehens
+     * @return monatliche Rate
+     */
+    public static BigDecimal monthlyPayment(LoanTerms terms) {
+        if (terms == null) {
+            throw new IllegalArgumentException("terms must not be null");
+        }
+        return monthlyPayment(terms.principal(), terms.annualRate(), terms.months());
     }
 }
