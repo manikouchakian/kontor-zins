@@ -1,7 +1,6 @@
 package de.manikouchakian.kontorzins.model;
 
 import java.math.BigDecimal;
-import java.util.Objects;
 
 /**
  * Die Eckdaten eines Darlehens: Betrag, Nominalzins, Laufzeit.
@@ -11,27 +10,24 @@ import java.util.Objects;
  * Compiler etwas merkt. Als eigener Typ passiert das nicht mehr, und die Prüfung der
  * Werte findet einmal statt statt in jeder Methode neu.
  *
- * <p>Die Klasse ist unveränderlich: alle Felder sind {@code final}, es gibt keine
- * Setter, und die Klasse selbst ist {@code final}, damit keine Unterklasse die
- * Zusicherung wieder aufweicht.
+ * <p>Ein {@code LoanTerms}, das existiert, ist gültig. Ungültige Eingaben werden im
+ * Konstruktor abgelehnt und kommen gar nicht erst in das Objekt hinein.
+ *
+ * @param principal  Darlehensbetrag in Euro, größer als 0, auf Cent gerundet
+ * @param annualRate nominaler Jahreszins als Dezimalzahl, {@code 0.039} für 3,9 %
+ * @param months     Laufzeit in Monaten, zwischen 1 und {@value #MAX_MONTHS}
  */
-public final class LoanTerms {
+public record LoanTerms(BigDecimal principal, BigDecimal annualRate, int months) {
 
     /** 50 Jahre. Längere Laufzeiten sind in der Praxis kein Darlehen mehr, sondern ein Tippfehler. */
     public static final int MAX_MONTHS = 600;
 
     private static final BigDecimal MONTHS_PER_YEAR = BigDecimal.valueOf(12);
 
-    private final BigDecimal principal;
-    private final BigDecimal annualRate;
-    private final int months;
-
     /**
-     * @param principal  Darlehensbetrag in Euro, größer als 0
-     * @param annualRate nominaler Jahreszins als Dezimalzahl, {@code 0.039} für 3,9 %
-     * @param months     Laufzeit in Monaten, zwischen 1 und {@value #MAX_MONTHS}
+     * Kompakter Konstruktor: prüft und normalisiert, bevor die Felder gesetzt werden.
      */
-    public LoanTerms(BigDecimal principal, BigDecimal annualRate, int months) {
+    public LoanTerms {
         if (principal == null) {
             throw new IllegalArgumentException("principal must not be null");
         }
@@ -53,17 +49,22 @@ public final class LoanTerms {
 
         // Normalisieren, nicht nur prüfen: sonst wären 250000 und 250000.00 zwei
         // verschiedene Objekte. BigDecimal.equals vergleicht auch die Skala.
-        this.principal = Rounding.money(principal);
-        this.annualRate = Rounding.rate(annualRate);
-        this.months = months;
+        principal = Rounding.money(principal);
+        annualRate = Rounding.rate(annualRate);
     }
 
     /**
      * Dasselbe Darlehen, aber die Laufzeit in Jahren.
      *
      * <p>Ein zweiter Konstruktor ginge hier nicht: {@code (BigDecimal, BigDecimal, int)}
-     * ist bereits vergeben. Überladen ist unmöglich, und das ist kein Nachteil —
-     * {@code LoanTerms.ofYears(...)} sagt am Aufrufort, was die Zahl bedeutet.
+     * ist bereits die Signatur des kanonischen Konstruktors. Überladen ist unmöglich,
+     * und das ist kein Nachteil — {@code LoanTerms.ofYears(...)} sagt am Aufrufort,
+     * was die Zahl bedeutet. Ein zweiter Konstruktor hätte das nie gekonnt.
+     *
+     * @param principal  Darlehensbetrag
+     * @param annualRate nominaler Jahreszins als Dezimalzahl
+     * @param years      Laufzeit in Jahren, größer als 0
+     * @return Eckdaten mit {@code years * 12} Monaten
      */
     public static LoanTerms ofYears(BigDecimal principal, BigDecimal annualRate, int years) {
         if (years <= 0) {
@@ -72,56 +73,26 @@ public final class LoanTerms {
         return new LoanTerms(principal, annualRate, Math.multiplyExact(years, 12));
     }
 
-    /** @return Darlehensbetrag */
-    public BigDecimal principal() {
-        return principal;
-    }
-
-    /** @return nominaler Jahreszins als Dezimalzahl */
-    public BigDecimal annualRate() {
-        return annualRate;
-    }
-
-    /** @return Laufzeit in Monaten */
-    public int months() {
-        return months;
-    }
-
     /**
-     * Monatszins, abgeleitet aus dem Jahreszins. Wird an genau einer Stelle berechnet.
+     * Monatszins, abgeleitet aus dem Jahreszins.
+     *
+     * <p>Wird an genau einer Stelle berechnet. Die Ratenformel und die Schleife im
+     * Tilgungsplan benutzen denselben Wert — sonst kaeme die Rate aus einer anderen
+     * Zahl als der Plan, und die Differenz wuerde erst in der letzten Rate auffallen.
+     *
+     * <p>Hier wird bewusst <em>nicht</em> auf zwei Stellen gerundet. Der Monatszins ist
+     * kein Geldbetrag, sondern ein Zwischenschritt.
+     *
+     * @return Jahreszins geteilt durch 12
      */
     public BigDecimal monthlyRate() {
         return annualRate.divide(MONTHS_PER_YEAR, Rounding.INTERMEDIATE);
     }
 
-    /** @return {@code true}, wenn es sich um ein zinsloses Darlehen handelt */
+    /**
+     * @return {@code true}, wenn es sich um ein zinsloses Darlehen handelt
+     */
     public boolean isInterestFree() {
         return annualRate.signum() == 0;
-    }
-
-    @Override
-    public boolean equals(Object other) {
-        if (this == other) {
-            return true;
-        }
-        if (!(other instanceof LoanTerms)) {
-            return false;
-        }
-        LoanTerms that = (LoanTerms) other;
-        return months == that.months
-                && principal.equals(that.principal)
-                && annualRate.equals(that.annualRate);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(principal, annualRate, months);
-    }
-
-    @Override
-    public String toString() {
-        return "LoanTerms{principal=" + principal
-                + ", annualRate=" + annualRate
-                + ", months=" + months + "}";
     }
 }
