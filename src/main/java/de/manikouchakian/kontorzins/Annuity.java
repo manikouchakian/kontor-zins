@@ -1,10 +1,15 @@
 package de.manikouchakian.kontorzins;
 
+import de.manikouchakian.kontorzins.model.Installment;
 import de.manikouchakian.kontorzins.model.LoanTerms;
+import de.manikouchakian.kontorzins.model.Rounding;
+import de.manikouchakian.kontorzins.schedule.Schedule;
 
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Berechnungen rund um das Annuitätendarlehen.
@@ -73,5 +78,64 @@ public final class Annuity {
             throw new IllegalArgumentException("terms must not be null");
         }
         return monthlyPayment(terms.principal(), terms.annualRate(), terms.months());
+    }
+
+    /**
+     * Vollständiger Tilgungsplan eines Annuitätendarlehens.
+     *
+     * <p>Pro Monat gilt:
+     *
+     * <pre>
+     * Zinsanteil    = Restschuld * Monatszins   (auf Cent gerundet)
+     * Tilgungsanteil = Rate - Zinsanteil
+     * Restschuld    = Restschuld - Tilgungsanteil
+     * </pre>
+     *
+     * <p><b>Die letzte Rate ist der interessante Teil.</b> Weil jeder Zinsanteil auf
+     * Cent gerundet wird, landet die Restschuld nach n Monaten nicht bei exakt 0,00,
+     * sondern ein paar Cent daneben. Banken lösen das, indem die letzte Rate genau die
+     * Restschuld plus deren Zinsen ist. Genau das passiert hier: der letzte
+     * Tilgungsanteil wird nicht gerechnet, sondern <em>gesetzt</em>. Damit ist die
+     * Summe aller Tilgungsanteile per Konstruktion der Darlehensbetrag, und
+     * {@link Schedule} kann das als harte Bedingung prüfen.
+     *
+     * @param terms Eckdaten des Darlehens
+     * @return Tilgungsplan über die gesamte Laufzeit
+     */
+    public static Schedule schedule(LoanTerms terms) {
+        if (terms == null) {
+            throw new IllegalArgumentException("terms must not be null");
+        }
+
+        BigDecimal payment = monthlyPayment(terms);
+        BigDecimal monthlyRate = terms.monthlyRate();
+        BigDecimal remainingDebt = terms.principal();
+        int lastMonth = terms.months();
+
+        List<Installment> rows = new ArrayList<>(lastMonth);
+
+        for (int month = 1; month <= lastMonth; month++) {
+            BigDecimal interest = Rounding.money(remainingDebt.multiply(monthlyRate));
+            BigDecimal principalPart;
+
+            if (month == lastMonth) {
+                // Die letzte Rate raeumt auf, was die Rundung uebrig gelassen hat.
+                principalPart = remainingDebt;
+            } else {
+                // Kein eigener Waechter noetig: waere die Rate kleiner als der Zins,
+                // waere principalPart negativ, und Installment lehnt das im Konstruktor
+                // ab. Der Fehler faellt genau dort auf, wo der falsche Wert entsteht.
+                principalPart = Rounding.money(payment.subtract(interest));
+                if (principalPart.compareTo(remainingDebt) > 0) {
+                    principalPart = remainingDebt;
+                }
+            }
+
+            BigDecimal actualPayment = interest.add(principalPart);
+            remainingDebt = remainingDebt.subtract(principalPart);
+            rows.add(new Installment(month, actualPayment, interest, principalPart, remainingDebt));
+        }
+
+        return new Schedule(terms, rows);
     }
 }
